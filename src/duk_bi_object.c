@@ -11,14 +11,15 @@ DUK_INTERNAL duk_ret_t duk_bi_object_constructor(duk_context *ctx) {
 		return 1;
 	}
 
+	/* FIXME: change to duk_is_object_like()? */
 	if (duk_is_object(ctx, 0)) {
 		return 1;
 	}
 
 	/* Pointer and buffer primitive values are treated like other
 	 * primitives values which have a fully fledged object counterpart:
-	 * promote to an object value.  Lightfuncs are coerced with
-	 * ToObject() even they could also be returned as is.
+	 * promote to an object value.  Lightfuncs and plain buffers are
+	 * coerced with ToObject() even they could also be returned as is.
 	 */
 	if (duk_check_type_mask(ctx, 0, DUK_TYPE_MASK_STRING |
 	                                DUK_TYPE_MASK_BOOLEAN |
@@ -46,33 +47,39 @@ DUK_INTERNAL duk_ret_t duk_bi_object_getprototype_shared(duk_context *ctx) {
 	duk_hthread *thr = (duk_hthread *) ctx;
 	duk_hobject *h;
 	duk_hobject *proto;
+	duk_tval *tv;
 
 	DUK_UNREF(thr);
 
 	/* magic: 0=getter call, 1=Object.getPrototypeOf */
 	if (duk_get_current_magic(ctx) == 0) {
-		duk_push_this_coercible_to_object(ctx);
-		duk_insert(ctx, 0);
+		tv = DUK_HTHREAD_THIS_PTR(thr);
+	} else {
+		DUK_ASSERT(duk_get_top(ctx) >= 1);
+		tv = DUK_GET_TVAL_POSIDX(ctx, 0);
 	}
 
-	h = duk_require_hobject_or_lfunc(ctx, 0);
-	/* h is NULL for lightfunc */
-
-	/* XXX: should the API call handle this directly, i.e. attempt
-	 * to duk_push_hobject(ctx, null) would push a null instead?
-	 * (On the other hand 'undefined' would be just as logical, but
-	 * not wanted here.)
-	 */
-
-	if (h == NULL) {
-		duk_push_hobject_bidx(ctx, DUK_BIDX_FUNCTION_PROTOTYPE);
-	} else {
+	switch (DUK_TVAL_GET_TAG(tv)) {
+	case DUK_TAG_BUFFER:
+		proto = thr->builtins[DUK_BIDX_ARRAYBUFFER_PROTOTYPE];
+		break;
+	case DUK_TAG_LIGHTFUNC:
+		proto = thr->builtins[DUK_BIDX_FUNCTION_PROTOTYPE];
+		break;
+	case DUK_TAG_OBJECT:
+		h = DUK_TVAL_GET_OBJECT(tv);
 		proto = DUK_HOBJECT_GET_PROTOTYPE(thr->heap, h);
-		if (proto) {
-			duk_push_hobject(ctx, proto);
-		} else {
-			duk_push_null(ctx);
-		}
+		break;
+	default:
+		/* This implicitly handles CheckObjectCoercible() caused
+		 * TypeError.
+		 */
+		return DUK_RET_TYPE_ERROR;
+	}
+	if (proto) {
+		duk_push_hobject(ctx, proto);
+	} else {
+		duk_push_null(ctx);
 	}
 	return 1;
 }
@@ -113,6 +120,13 @@ DUK_INTERNAL duk_ret_t duk_bi_object_setprototype_shared(duk_context *ctx) {
 	/* h_new_proto may be NULL */
 	if (duk_is_lightfunc(ctx, 0)) {
 		if (h_new_proto == thr->builtins[DUK_BIDX_FUNCTION_PROTOTYPE]) {
+			goto skip;
+		}
+		goto fail_nonextensible;
+	}
+	if (duk_is_buffer(ctx, 0)) {
+		/* FIXME: share code */
+		if (h_new_proto == thr->builtins[DUK_BIDX_ARRAYBUFFER_PROTOTYPE]) {
 			goto skip;
 		}
 		goto fail_nonextensible;
@@ -160,6 +174,8 @@ DUK_INTERNAL duk_ret_t duk_bi_object_constructor_create(duk_context *ctx) {
 	duk_hobject *proto = NULL;
 
 	DUK_ASSERT_TOP(ctx, 2);
+
+	duk_hbufobj_promote_plain(ctx, 0);  /* FIXME: optimize */
 
 	tv = duk_get_tval(ctx, 0);
 	DUK_ASSERT(tv != NULL);
@@ -216,9 +232,10 @@ DUK_INTERNAL duk_ret_t duk_bi_object_constructor_define_property(duk_context *ct
 
 	/* Lightfuncs are currently supported by coercing to a temporary
 	 * Function object; changes will be allowed (the coerced value is
-	 * extensible) but will be lost.
+	 * extensible) but will be lost.  FIXME: desc.
 	 */
-	obj = duk_require_hobject_or_lfunc_coerce(ctx, 0);
+	duk_hbufobj_promote_plain(ctx, 0);
+	obj = duk_require_hobject_or_lfunc_coerce(ctx, 0);  /* FIXME: shared require_hobject_promote */
 	(void) duk_to_string(ctx, 1);
 	key = duk_require_hstring(ctx, 1);
 	(void) duk_require_hobject(ctx, 2);
@@ -275,6 +292,7 @@ DUK_INTERNAL duk_ret_t duk_bi_object_constructor_define_properties(duk_context *
 	duk_hobject *set;
 
 	/* Lightfunc handling by ToObject() coercion. */
+	/* FIXME: plain */
 	obj = duk_require_hobject_or_lfunc_coerce(ctx, 0);  /* target */
 	DUK_ASSERT(obj != NULL);
 
@@ -354,13 +372,22 @@ DUK_INTERNAL duk_ret_t duk_bi_object_constructor_seal_freeze_shared(duk_context 
 	duk_hobject *h;
 	duk_bool_t is_freeze;
 
-	h = duk_require_hobject_or_lfunc(ctx, 0);
-	if (!h) {
-		/* Lightfunc, always success. */
+	/* FIXME: plain buffer shared helper */
+	is_freeze = (duk_bool_t) duk_get_current_magic(ctx);
+	if (duk_is_buffer(ctx, 0)) {
+		/* Plain buffer: already sealed, but not frozen (and can't be frozen
+		 * because index properties can't be made non-writable.
+		 */
+		if (is_freeze) {
+			return DUK_RET_TYPE_ERROR;
+		}
+		return 1;
+	} else if (duk_is_lightfunc(ctx, 0)) {
+		/* Lightfunc: already sealed and frozen, success. */
 		return 1;
 	}
+	h = duk_require_hobject(ctx, 0);
 
-	is_freeze = (duk_bool_t) duk_get_current_magic(ctx);
 	duk_hobject_object_seal_freeze_helper(thr, h, is_freeze);
 
 	/* Sealed and frozen objects cannot gain any more properties,
@@ -375,11 +402,11 @@ DUK_INTERNAL duk_ret_t duk_bi_object_constructor_prevent_extensions(duk_context 
 	duk_hthread *thr = (duk_hthread *) ctx;
 	duk_hobject *h;
 
-	h = duk_require_hobject_or_lfunc(ctx, 0);
-	if (!h) {
-		/* Lightfunc, always success. */
+	if (duk_check_type_mask(ctx, 0, DUK_TYPE_MASK_LIGHTFUNC | DUK_TYPE_MASK_BUFFER)) {
+		/* Lightfunc or plain buffer, already non-extensible so always success. */
 		return 1;
 	}
+	h = duk_require_hobject(ctx, 0);
 	DUK_ASSERT(h != NULL);
 
 	DUK_HOBJECT_CLEAR_EXTENSIBLE(h);
@@ -397,13 +424,18 @@ DUK_INTERNAL duk_ret_t duk_bi_object_constructor_is_sealed_frozen_shared(duk_con
 	duk_bool_t is_frozen;
 	duk_bool_t rc;
 
-	h = duk_require_hobject_or_lfunc(ctx, 0);
-	if (!h) {
-		duk_push_true(ctx);  /* frozen and sealed */
+	/* FIXME: helper changes; lightfunc / plain buffer have different treatment */
+	is_frozen = duk_get_current_magic(ctx);
+	if (duk_is_buffer(ctx, 0)) {
+		duk_push_boolean(ctx, is_frozen ? 0 : 1);  /* sealed but not frozen (index properties writable) */
 	} else {
-		is_frozen = duk_get_current_magic(ctx);
-		rc = duk_hobject_object_is_sealed_frozen_helper((duk_hthread *) ctx, h, is_frozen /*is_frozen*/);
-		duk_push_boolean(ctx, rc);
+		h = duk_require_hobject_or_lfunc(ctx, 0);
+		if (!h) {
+			duk_push_true(ctx);  /* frozen and sealed */
+		} else {
+			rc = duk_hobject_object_is_sealed_frozen_helper((duk_hthread *) ctx, h, is_frozen /*is_frozen*/);
+			duk_push_boolean(ctx, rc);
+		}
 	}
 	return 1;
 }
@@ -411,10 +443,13 @@ DUK_INTERNAL duk_ret_t duk_bi_object_constructor_is_sealed_frozen_shared(duk_con
 DUK_INTERNAL duk_ret_t duk_bi_object_constructor_is_extensible(duk_context *ctx) {
 	duk_hobject *h;
 
-	h = duk_require_hobject_or_lfunc(ctx, 0);
-	if (!h) {
+	/* FIXME: helper: get_hobject_allownull_mask(ctx, 0, DUK_TYPE_MASK...) */
+
+	if (duk_check_type_mask(ctx, 0, DUK_TYPE_MASK_LIGHTFUNC | DUK_TYPE_MASK_BUFFER)) {
 		duk_push_false(ctx);
 	} else {
+		h = duk_require_hobject(ctx, 0);
+		DUK_ASSERT(h != NULL);
 		duk_push_boolean(ctx, DUK_HOBJECT_HAS_EXTENSIBLE(h));
 	}
 	return 1;
@@ -437,6 +472,7 @@ DUK_INTERNAL duk_ret_t duk_bi_object_constructor_keys_shared(duk_context *ctx) {
 	DUK_ASSERT_TOP(ctx, 1);
 	DUK_UNREF(thr);
 
+	duk_hbufobj_promote_plain(ctx, 0);  /* FIXME: merge the coerce calls */
 	obj = duk_require_hobject_or_lfunc_coerce(ctx, 0);
 	DUK_ASSERT(obj != NULL);
 	DUK_UNREF(obj);
@@ -542,6 +578,9 @@ DUK_INTERNAL duk_ret_t duk_bi_object_prototype_to_locale_string(duk_context *ctx
 }
 
 DUK_INTERNAL duk_ret_t duk_bi_object_prototype_value_of(duk_context *ctx) {
+	/* FIXME: for plain buffers this returns the object coerced
+	 * version of the buffer... good behavior?
+	 */
 	(void) duk_push_this_coercible_to_object(ctx);
 	return 1;
 }

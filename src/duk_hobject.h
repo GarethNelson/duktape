@@ -78,7 +78,7 @@
 #define DUK_HOBJECT_CLASS_AS_FLAGS(v)          (((duk_uint_t) (v)) << DUK_HOBJECT_FLAG_CLASS_BASE)
 
 /* E5 Section 8.6.2 + custom classes */
-#define DUK_HOBJECT_CLASS_UNUSED               0
+#define DUK_HOBJECT_CLASS_NONE                 0
 #define DUK_HOBJECT_CLASS_ARGUMENTS            1
 #define DUK_HOBJECT_CLASS_ARRAY                2
 #define DUK_HOBJECT_CLASS_BOOLEAN              3
@@ -112,7 +112,7 @@
 
 /* class masks */
 #define DUK_HOBJECT_CMASK_ALL                  ((1UL << (DUK_HOBJECT_CLASS_MAX + 1)) - 1UL)
-#define DUK_HOBJECT_CMASK_UNUSED               (1UL << DUK_HOBJECT_CLASS_UNUSED)
+#define DUK_HOBJECT_CMASK_NONE                 (1UL << DUK_HOBJECT_CLASS_NONE)
 #define DUK_HOBJECT_CMASK_ARGUMENTS            (1UL << DUK_HOBJECT_CLASS_ARGUMENTS)
 #define DUK_HOBJECT_CMASK_ARRAY                (1UL << DUK_HOBJECT_CLASS_ARRAY)
 #define DUK_HOBJECT_CMASK_BOOLEAN              (1UL << DUK_HOBJECT_CLASS_BOOLEAN)

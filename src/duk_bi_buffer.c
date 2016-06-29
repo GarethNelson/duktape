@@ -2,6 +2,8 @@
  *  Duktape.Buffer, Node.js Buffer, and Khronos/ES6 TypedArray built-ins
  */
 
+/* FIXME: accept plain buffer everywhere an ArrayBuffer is accepted */
+
 #include "duk_internal.h"
 
 /*
@@ -115,6 +117,7 @@ DUK_LOCAL duk_hbufobj *duk__getrequire_bufobj_this(duk_context *ctx, duk_bool_t 
 
 	tv = duk_get_borrowed_this_tval(ctx);
 	DUK_ASSERT(tv != NULL);
+
 	if (DUK_TVAL_IS_OBJECT(tv)) {
 		h_this = (duk_hbufobj *) DUK_TVAL_GET_OBJECT(tv);
 		DUK_ASSERT(h_this != NULL);
@@ -387,6 +390,35 @@ DUK_LOCAL void duk__clamp_startend_negidx_shifted(duk_context *ctx,
 }
 #endif  /* DUK_USE_BUFFEROBJECT_SUPPORT */
 
+/* FIXME: conditionality */
+DUK_INTERNAL void duk_hbufobj_promote_plain(duk_context *ctx, duk_idx_t idx) {
+	if (duk_is_buffer(ctx, idx)) {
+		DUK_D(DUK_DPRINT("coerce plain buffer to ArrayBuffer"));
+		duk_to_object(ctx, idx);
+	}
+}
+
+/*
+ *  Coercion helper
+ */
+
+DUK_INTERNAL void duk_hbufobj_push_arraybuffer_from_plain(duk_hthread *thr, duk_hbuffer *h_buf) {
+	duk_context *ctx;
+	duk_hbufobj *h_bufobj;
+
+	ctx = (duk_context *) thr;
+
+	/* Push ArrayBuffer which will share the same underlying buffer. */
+	h_bufobj = duk_push_bufobj_raw(ctx,
+	                               DUK_HOBJECT_FLAG_EXTENSIBLE |
+	                               DUK_HOBJECT_FLAG_BUFOBJ |
+	                               DUK_HOBJECT_CLASS_AS_FLAGS(DUK_HOBJECT_CLASS_ARRAYBUFFER),
+	                               DUK_BIDX_ARRAYBUFFER_PROTOTYPE);
+	DUK_ASSERT(h_bufobj != NULL);
+	duk__set_bufobj_buffer(ctx, h_bufobj, h_buf);
+	DUK_ASSERT_HBUFOBJ_VALID(h_bufobj);
+}
+
 /*
  *  Indexed read/write helpers (also used from outside this file)
  */
@@ -599,21 +631,18 @@ DUK_INTERNAL duk_ret_t duk_bi_nodejs_buffer_constructor(duk_context *ctx) {
 	duk_size_t buf_size;
 
 	switch (duk_get_type(ctx, 0)) {
-	case DUK_TYPE_BUFFER: {
-		/* Custom behavior: plain buffer is used as internal buffer
-		 * without making a copy (matches Duktape.Buffer).
-		 */
-		duk_set_top(ctx, 1);  /* -> [ buffer ] */
-		break;
-	}
 	case DUK_TYPE_NUMBER: {
 		len = duk_to_int_clamped(ctx, 0, 0, DUK_INT_MAX);
 		(void) duk_push_fixed_buffer(ctx, (duk_size_t) len);
 		break;
 	}
+	case DUK_TYPE_BUFFER:  /* Treat like ArrayBuffer. */
 	case DUK_TYPE_OBJECT: {
 		duk_uint8_t *buf;
 
+		/* FIXME: ArrayBuffer; https://nodejs.org/api/buffer.html#buffer_buffer_from_buffer_alloc_and_buffer_allocunsafe
+		 * "Passing an ArrayBuffer returns a Buffer that shares allocated memory with the given ArrayBuffer."
+		 */
 		(void) duk_get_prop_string(ctx, 0, "length");
 		len = duk_to_int_clamped(ctx, -1, 0, DUK_INT_MAX);
 		duk_pop(ctx);
@@ -673,6 +702,7 @@ DUK_INTERNAL duk_ret_t duk_bi_arraybuffer_constructor(duk_context *ctx) {
 	duk_hthread *thr;
 	duk_hbufobj *h_bufobj;
 	duk_hbuffer *h_val;
+	duk_int_t len;
 
 	DUK_ASSERT_CTX_VALID(ctx);
 	thr = (duk_hthread *) ctx;
@@ -683,33 +713,21 @@ DUK_INTERNAL duk_ret_t duk_bi_arraybuffer_constructor(duk_context *ctx) {
 		return DUK_RET_TYPE_ERROR;
 	}
 
-	if (duk_is_buffer(ctx, 0)) {
-		/* Custom behavior: plain buffer is used as internal buffer
-		 * without making a copy (matches Duktape.Buffer).
-		 */
-
-		h_val = duk_get_hbuffer(ctx, 0);
-		DUK_ASSERT(h_val != NULL);
-
-		/* XXX: accept any duk_hbufobj type as an input also? */
-	} else {
-		duk_int_t len;
-		len = duk_to_int(ctx, 0);
-		if (len < 0) {
-			goto fail_length;
-		}
-		(void) duk_push_fixed_buffer(ctx, (duk_size_t) len);
-		h_val = (duk_hbuffer *) duk_get_hbuffer(ctx, -1);
-		DUK_ASSERT(h_val != NULL);
+	len = duk_to_int(ctx, 0);
+	if (len < 0) {
+		goto fail_length;
+	}
+	(void) duk_push_fixed_buffer(ctx, (duk_size_t) len);
+	h_val = (duk_hbuffer *) duk_get_hbuffer(ctx, -1);
+	DUK_ASSERT(h_val != NULL);
 
 #if !defined(DUK_USE_ZERO_BUFFER_DATA)
-		/* Khronos/ES6 requires zeroing even when DUK_USE_ZERO_BUFFER_DATA
-		 * is not set.
-		 */
-		DUK_ASSERT(!DUK_HBUFFER_HAS_DYNAMIC((duk_hbuffer *) h_val));
-		DUK_MEMZERO((void *) DUK_HBUFFER_FIXED_GET_DATA_PTR(thr->heap, h_val), (duk_size_t) len);
+	/* Khronos/ES6 requires zeroing even when DUK_USE_ZERO_BUFFER_DATA
+	 * is not set.
+	 */
+	DUK_ASSERT(!DUK_HBUFFER_HAS_DYNAMIC((duk_hbuffer *) h_val));
+	DUK_MEMZERO((void *) DUK_HBUFFER_FIXED_GET_DATA_PTR(thr->heap, h_val), (duk_size_t) len);
 #endif
-	}
 
 	h_bufobj = duk_push_bufobj_raw(ctx,
 	                               DUK_HOBJECT_FLAG_EXTENSIBLE |
@@ -793,6 +811,12 @@ DUK_INTERNAL duk_ret_t duk_bi_typedarray_constructor(duk_context *ctx) {
 	 * the same buffer is created; otherwise a new ArrayBuffer is always
 	 * created.
 	 */
+
+	/* FIXME: initial iteration to treat a plain buffer like an ArrayBuffer:
+	 * coerce to an ArrayBuffer object and use that as .buffer.  The underlying
+	 * buffer will be the same but result .buffer !== inputPlainBuffer.
+	 */
+	duk_hbufobj_promote_plain(ctx, 0);
 
 	tv = duk_get_tval(ctx, 0);
 	DUK_ASSERT(tv != NULL);  /* arg count */
@@ -921,14 +945,6 @@ DUK_INTERNAL duk_ret_t duk_bi_typedarray_constructor(duk_context *ctx) {
 			elem_length_signed = (duk_int_t) duk_get_length(ctx, 0);
 			copy_mode = 2;
 		}
-	} else if (DUK_TVAL_IS_BUFFER(tv)) {
-		/* Accept plain buffer values like array initializers
-		 * (new in Duktape 1.4.0).
-		 */
-		duk_hbuffer *h_srcbuf;
-		h_srcbuf = DUK_TVAL_GET_BUFFER(tv);
-		elem_length_signed = (duk_int_t) DUK_HBUFFER_GET_SIZE(h_srcbuf);
-		copy_mode = 2;  /* XXX: could add fast path for u8 compatible views */
 	} else {
 		/* Non-object argument is simply int coerced, matches
 		 * V8 behavior (except for "null", which we coerce to
@@ -1113,6 +1129,9 @@ DUK_INTERNAL duk_ret_t duk_bi_dataview_constructor(duk_context *ctx) {
 		return DUK_RET_TYPE_ERROR;
 	}
 
+	/* FIXME: initial behavior: promote to ArrayBuffer */
+	duk_hbufobj_promote_plain(ctx, 0);
+
 	h_bufarg = duk__require_bufobj_value(ctx, 0);
 	DUK_ASSERT(h_bufarg != NULL);
 
@@ -1230,7 +1249,10 @@ DUK_INTERNAL duk_ret_t duk_bi_nodejs_buffer_tostring(duk_context *ctx) {
 		;
 	}
 
-	duk_to_string(ctx, -1);
+	/* This 1:1 coercion creates a way for Ecmascript code to convert a
+	 * byte buffer into a string and e.g. create an internal string key.
+	 */
+	(void) duk_buffer_to_string(ctx, -1);
 	return 1;
 
  type_error:
@@ -1290,7 +1312,7 @@ DUK_INTERNAL duk_ret_t duk_bi_buffer_prototype_tostring_shared(duk_context *ctx)
 	}
 
 	if (to_string) {
-		duk_to_string(ctx, -1);
+		(void) duk_buffer_to_string(ctx, -1);
 	}
 	return 1;
 
@@ -1991,6 +2013,7 @@ DUK_INTERNAL duk_ret_t duk_bi_buffer_slice_shared(duk_context *ctx) {
 
 	magic = duk_get_current_magic(ctx);
 	h_this = duk__require_bufobj_this(ctx);
+	/* FIXME: support plain buffer */
 
 	/* Slice offsets are element (not byte) offsets, which only matters
 	 * for TypedArray views, Node.js Buffer and ArrayBuffer have shift

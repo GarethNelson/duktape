@@ -495,13 +495,16 @@ DUK_EXTERNAL_DECL duk_bool_t duk_is_dynamic_buffer(duk_context *ctx, duk_idx_t i
 DUK_EXTERNAL_DECL duk_bool_t duk_is_fixed_buffer(duk_context *ctx, duk_idx_t idx);
 DUK_EXTERNAL_DECL duk_bool_t duk_is_external_buffer(duk_context *ctx, duk_idx_t idx);
 
+/* FIXME: should 'buffer' be considered primitive from API point of view?
+ * Because duk_to_primitive() coerces a buffer to a string (usually),
+ * maybe should not.
+ */
 #define duk_is_primitive(ctx,idx) \
 	duk_check_type_mask((ctx), (idx), DUK_TYPE_MASK_UNDEFINED | \
 	                                  DUK_TYPE_MASK_NULL | \
 	                                  DUK_TYPE_MASK_BOOLEAN | \
 	                                  DUK_TYPE_MASK_NUMBER | \
 	                                  DUK_TYPE_MASK_STRING | \
-	                                  DUK_TYPE_MASK_BUFFER | \
 	                                  DUK_TYPE_MASK_POINTER | \
 	                                  DUK_TYPE_MASK_LIGHTFUNC)
 
@@ -638,6 +641,9 @@ DUK_EXTERNAL_DECL const char *duk_hex_encode(duk_context *ctx, duk_idx_t idx);
 DUK_EXTERNAL_DECL void duk_hex_decode(duk_context *ctx, duk_idx_t idx);
 DUK_EXTERNAL_DECL const char *duk_json_encode(duk_context *ctx, duk_idx_t idx);
 DUK_EXTERNAL_DECL void duk_json_decode(duk_context *ctx, duk_idx_t idx);
+
+DUK_EXTERNAL_DECL const char *duk_buffer_to_string(duk_context *ctx, duk_idx_t idx);
+/* FIXME: duk_string_to_buffer(); encoding? */
 
 /*
  *  Buffer
