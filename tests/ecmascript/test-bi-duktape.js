@@ -2,6 +2,8 @@
  *  Duktape builtin.
  */
 
+/*@include util-buffer.js@*/
+
 /*---
 {
     "custom": true
@@ -131,17 +133,17 @@ string
 666f6f
 string
 666f6fe188b4
-buffer
+object
 102 111 111
-buffer
+object
 102 111 111 4660
 string
 Zm9v
 string
 Zm9v4Yi0
-buffer
+object
 102 111 111
-buffer
+object
 102 111 111 4660
 ===*/
 
@@ -152,7 +154,7 @@ function printEnc(x) {
 
 function printDec(x) {
     print(typeof x);
-    x = String(x);
+    x = bufferToString(x);
     var res = [];
     for (var i = 0; i < x.length; i++) {
         res.push(x.charCodeAt(i));

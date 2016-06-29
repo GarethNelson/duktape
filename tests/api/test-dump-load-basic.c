@@ -226,9 +226,13 @@ static duk_ret_t test_properties(duk_context *ctx, void *udata) {
 	duk_dump_function(ctx);
 	duk_load_function(ctx);
 
+	/* With Duktape 2.x an internal key prefix (0xFF) can't be created
+	 * using pure Ecmascript code (at least at the time of writing) so
+	 * create one in C code and pass it to the eval code.
+	 */
+
 	duk_eval_string(ctx,
-		"(function (v) {\n"
-		"    var pfx = Duktape.dec('hex', 'ff');\n"
+		"(function (v, pfx) {\n"
 		"    [ 'length', 'name', 'fileName', 'prototype' ].forEach(function (k) {\n"
 		"        print('.' + k + ': ' + JSON.stringify(Object.getOwnPropertyDescriptor(v, k)));\n"
 		"    });\n"
@@ -244,7 +248,8 @@ static duk_ret_t test_properties(duk_context *ctx, void *udata) {
 		"    print('descriptor of .prototype.constructor: ' + JSON.stringify(Object.getOwnPropertyDescriptor(v.prototype, 'constructor')));\n"
 		"})");
 	duk_dup(ctx, -2),
-	duk_call(ctx, 1);
+	duk_push_string(ctx, "\xFF");  /* internal key prefix */
+	duk_call(ctx, 2);
 	duk_pop(ctx);
 
 	duk_pop(ctx);

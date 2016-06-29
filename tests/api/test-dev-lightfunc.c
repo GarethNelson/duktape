@@ -965,9 +965,10 @@ static duk_ret_t test_to_buffer(duk_context *ctx, void *udata) {
 		                     ".replace(/\\/\\*/g, '(*').replace(/\\*\\//g, '*)')"
 		                     ".replace(/light_[0-9a-fA-F]+_/g, 'light_PTR_'); })");
 		duk_dup(ctx, -2);
+		duk_buffer_to_string(ctx, -1);
 		duk_call(ctx, 1);
 
-		printf("%s\n", duk_safe_to_string(ctx, -1));
+		printf("%s\n", duk_to_string(ctx, -1));
 		duk_pop(ctx);  /* pop temp */
 	}
 

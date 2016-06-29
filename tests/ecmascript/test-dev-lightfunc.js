@@ -14,6 +14,8 @@
  *  never ensure that the other argument is handled correctly.
  */
 
+/*@include util-buffer.js@*/
+
 /*---
 {
     "custom": true
@@ -649,8 +651,8 @@ try {
 
 /*===
 toBuffer() test
-buffer: function light_PTR_0511() {"light"}
-buffer: function light_PTR_0a11() {"light"}
+object: function light_PTR_0511() {"light"}
+object: function light_PTR_0a11() {"light"}
 ===*/
 
 function toBufferTest() {
@@ -2422,7 +2424,7 @@ function duktapeBuiltinTest() {
     // attempt to set finalizer
     testTypedJx(function () { return Duktape.fin(lfunc, function () {}); }, 'fin-set');
 
-    testTypedJx(function () { return sanitizeLfunc(Duktape.dec('hex', Duktape.enc('hex', lfunc))); }, 'encdec-hex');
+    testTypedJx(function () { return sanitizeLfunc(bufferToString(Duktape.dec('hex', Duktape.enc('hex', lfunc)))); }, 'encdec-hex');
     testTypedJx(function () { return Duktape.dec('hex', lfunc); }, 'dec-hex');
 
     // attempt to compact is a no-op
@@ -2579,7 +2581,7 @@ function duktapeLoggerBuiltinTest() {
 
     old_raw = Duktape.Logger.prototype.old_raw;
     Duktape.Logger.prototype.raw = function (buf) {
-        var msg = sanitizeLfunc(String(buf));
+        var msg = sanitizeLfunc(bufferToString(buf));
         msg = msg.replace(/^\S+/, 'TIMESTAMP');
         print(msg);
     };
@@ -2967,6 +2969,38 @@ function duktapeThreadBuiltinTest() {
 try {
     print('Duktape.Thread built-in test');
     duktapeThreadBuiltinTest();
+} catch (e) {
+    print(e.stack || e);
+}
+
+/*===
+Object .valueOf() test
+true
+function function
+false
+9
+6
+===*/
+
+function objectValueOfTest() {
+    var lfunc = Math.cos;
+    var t;
+
+    // Function .valueOf() is the same as Object.prototype.valueOf()
+    print(lfunc.valueOf === Object.prototype.valueOf);
+
+    // Calling lightFunc.valueOf() returns the object coerced version
+    // of the lightfunc.
+    t = lfunc.valueOf();
+    print(typeof lfunc, typeof t);
+    print(lfunc === t);
+    print(Duktape.info(lfunc)[0]);  // tag 9: lightfunc
+    print(Duktape.info(t)[0]);      // tag 6: object
+}
+
+try {
+    print('Object .valueOf() test');
+    objectValueOfTest();
 } catch (e) {
     print(e.stack || e);
 }
