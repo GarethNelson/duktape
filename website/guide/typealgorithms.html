@@ -1,5 +1,7 @@
 <h1 id="typealgorithms">Type algorithms</h1>
 
+<!-- FIXME: update for buffer change -->
+
 <p>This section describes how type-related Ecmascript algorithms
 like comparisons and coercions are extended to Duktape custom types.
 Duktape specific type algorithms (<code>ToBuffer()</code> and <code>ToPointer()</code>)
@@ -152,6 +154,10 @@ for standard types.  Custom type behavior is as follows:</p>
 <p>The custom types behave as follows for Ecmascript coercions described
 <a href="http://www.ecma-international.org/ecma-262/5.1/#sec-9">Type Conversion and Testing</a>
 (except SameValue which was already covered above):</p>
+
+<!-- FIXME: ToPrimitive()? -->
+<!-- FIXME: add duk_is_primitive()? -->
+<!-- FIXME: DefaultValue -->
 
 <table>
 <thead>

@@ -170,6 +170,7 @@ print(typeof result, result);  // prints 'buffer foo'
 
 <p>If you wish to get back a string value, you can simply:</p>
 <pre class="ecmascript-code">
+<!-- FIXME: fix -->
 var result = String(Duktape.dec('base64', 'Zm9v'));
 print(typeof result, result);  // prints 'string foo'
 </pre>
@@ -558,7 +559,7 @@ use the TypedArray bindings to do that: <code>copy = Duktape.Buffer(new Uint8Arr
 Buffer objects as their <code>this</code> binding.  This allows code such as:</p>
 <pre class="ecmascript-code">
 var plain_buf = Duktape.Buffer('test');
-print(plain_buf.toString());
+print(plain_buf.toString());  <!-- FIXME -->
 </pre>
 
 <h2 id="builtin-duktape-pointer">Duktape.Pointer (constructor)</h2>
