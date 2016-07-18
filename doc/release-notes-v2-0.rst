@@ -64,6 +64,22 @@ details.  Here's a summary of changes:
 
 To upgrade, see FIXME.
 
+Pointer behavior changes
+------------------------
+
+There are minor changes to pointer value behavior:
+
+* ``plainPointer instanceof Duktape.Pointer`` now evaluates to ``true``
+  (``false`` in Duktape 1.x)
+
+To upgrade, check pointer handling.
+
+Lightfunc behavior changes
+--------------------------
+
+FIXME: update, depending on whether ToObject() coercion or other operations
+changes.
+
 print() and alert() globals removed
 -----------------------------------
 
