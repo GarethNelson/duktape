@@ -1595,7 +1595,17 @@ Planned
 
 * Incompatible change: ArrayBuffer and plain buffer numeric indices are
   present but not enumerable, so that they won't be enumerated by for-in,
-  Object.keys(), or JSON (GH-867)
+  Object.keys(), or JSON (but are enumerated by Object.getOwnPropertyNames()
+  and duk_enum() when requesting non-enumerable keys) (GH-867)
+
+* Incompatible change: rework buffer types and their Ecmascript and C API
+  behavior: plain buffers now behave like ArrayBuffers and inherit from
+  ArrayBuffer.prototype (GH-864)
+
+* Incompatible change: plain pointer values now test true in instanceof
+  (plainPointer instanceof Duktape.Pointer === true) (GH-864)
+
+* Incompatible change: FIXME, lightfunc ToObject() coercion?
 
 * Incompatible change: add a userdata argument to duk_safe_call() to make it
   easier to pass C pointers to safe functions (GH-277, GH-727)
