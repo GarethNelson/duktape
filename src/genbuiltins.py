@@ -620,6 +620,40 @@ def metadata_normalize_missing_strings(meta, user_meta):
 			s['_auto_add_user'] = True
 			meta['strings'].append(s)
 
+# Convert built-in function properties into lightfuncs where applicable.
+def metadata_convert_lightfuncs(meta):
+	# FIXME: share
+	def _findObject(objid):
+		for i,t in enumerate(meta['objects']):
+			if t['id'] == objid:
+				return t, i
+		return None, None
+
+	for o in meta['objects']:
+		for p in o['properties']:
+			v = p['value']
+			ptype = None
+			if isinstance(v, dict):
+				ptype = p['value']['type']
+			if ptype != 'object':
+				continue
+
+			targ, targ_idx = _findObject(p['value']['id'])
+			if not targ.get('callable', False):
+				continue
+
+			# Object property is a function; check it's eligibility.
+			print(' - Candidate: %r %r (%r)' % (o.get('id', None), p.get('key', None), p['value']['id']))
+
+			if False:
+				continue
+
+			print('   => Convert to lightfunc')
+			p['value'] = {
+				'type': 'lightfunc',
+				'native': targ['native']
+				# FIXME: length, magic
+			}
 # Detect objects not reachable from any object with a 'bidx'.  This is usually
 # a user error because such objects can't be reached at runtime so they're
 # useless in RAM or ROM init data.
@@ -882,6 +916,11 @@ def load_metadata(opts, rom=False, build_info=None):
 	# For ROM objects, mark all properties non-configurable.
 	if rom:
 		metadata_normalize_rom_property_attributes(meta)
+
+	# Convert built-in function properties into lightfuncs if requested
+	# and function is eligible.
+	if rom and True:  # FIXME
+		metadata_convert_lightfuncs(meta)
 
 	# Create a list of objects needing a 'bidx'.  This is now just
 	# based on the 'builtins' metadata list but could be dynamically

@@ -61,6 +61,10 @@
 #    - Pointer:
 #      - type: pointer
 #      - NOTE: not supported yet, type is reserved
+#    - Lightfunc:
+#      - type: lightfunc
+#      - native: native function name
+#      - FIXME; nargs, magic
 #    - Reference to a built-in object:
 #      - type: object
 #        id: ID string of target object
