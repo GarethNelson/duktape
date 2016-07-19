@@ -1807,6 +1807,11 @@ DUK_INTERNAL void duk_lexer_parse_re_token(duk_lexer_ctx *lex_ctx, duk_re_token 
 		 *  only the start token ('[' or '[^') is parsed here.  The regexp
 		 *  compiler parses the ranges itself.
 		 */
+
+		/* FIXME: allow literal brackets too; left bracket not as easy as
+		 * left curly.
+		 */
+
 		advtok = DUK__ADVTOK(1, DUK_RETOK_ATOM_START_CHARCLASS);
 		if (y == '^') {
 			advtok = DUK__ADVTOK(2, DUK_RETOK_ATOM_START_CHARCLASS_INVERTED);
@@ -1816,6 +1821,7 @@ DUK_INTERNAL void duk_lexer_parse_re_token(duk_lexer_ctx *lex_ctx, duk_re_token 
 #if !defined(DUK_USE_ES6_REGEXP_BRACES)
 	case '}':
 #endif
+	/* FIXME: allow literal brackets too */
 	case ']': {
 		/* Although these could be parsed as PatternCharacters unambiguously (here),
 		 * E5 Section 15.10.1 grammar explicitly forbids these as PatternCharacters.
